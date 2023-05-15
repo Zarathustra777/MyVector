@@ -2,42 +2,42 @@
 
 namespace {
 
-struct Obj {
-    Obj() {
-        ++num_default_constructed;
-    }
+    struct Obj {
+        Obj() {
+            ++num_default_constructed;
+        }
 
-    Obj(const Obj& /*other*/) {
-        ++num_copied;
-    }
+        Obj(const Obj& /*other*/) {
+            ++num_copied;
+        }
 
-    Obj(Obj&& /*other*/) noexcept {
-        ++num_moved;
-    }
+        Obj(Obj&& /*other*/) noexcept {
+            ++num_moved;
+        }
 
-    Obj& operator=(const Obj& other) = default;
-    Obj& operator=(Obj&& other) = default;
+        Obj& operator=(const Obj& other) = default;
+        Obj& operator=(Obj&& other) = default;
 
-    ~Obj() {
-        ++num_destroyed;
-    }
+        ~Obj() {
+            ++num_destroyed;
+        }
 
-    static int GetAliveObjectCount() {
-        return num_default_constructed + num_copied + num_moved - num_destroyed;
-    }
+        static int GetAliveObjectCount() {
+            return num_default_constructed + num_copied + num_moved - num_destroyed;
+        }
 
-    static void ResetCounters() {
-        num_default_constructed = 0;
-        num_copied = 0;
-        num_moved = 0;
-        num_destroyed = 0;
-    }
+        static void ResetCounters() {
+            num_default_constructed = 0;
+            num_copied = 0;
+            num_moved = 0;
+            num_destroyed = 0;
+        }
 
-    static inline int num_default_constructed = 0;
-    static inline int num_copied = 0;
-    static inline int num_moved = 0;
-    static inline int num_destroyed = 0;
-};
+        static inline int num_default_constructed = 0;
+        static inline int num_copied = 0;
+        static inline int num_moved = 0;
+        static inline int num_destroyed = 0;
+    };
 
 }  // namespace
 
