@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <new>
 #include <utility>
+#include <memory>
+
 template <typename T>
 class RawMemory {
 public:
@@ -11,6 +13,15 @@ public:
     explicit RawMemory(size_t capacity)
             : buffer_(Allocate(capacity))
             , capacity_(capacity) {
+    }
+
+    RawMemory(const RawMemory&) = delete;
+    RawMemory& operator=(const RawMemory& rhs) = delete;
+    RawMemory(RawMemory&& other) noexcept {
+        Swap(other);
+    }
+    RawMemory& operator=(RawMemory&& rhs) noexcept {
+        Swap(rhs);
     }
 
     ~RawMemory() {
@@ -76,33 +87,45 @@ public:
     explicit Vector(size_t size )
             : data_(size)
             , size_(size){
-        size_t i = 0;
-        try {
-            for ( ;i != size; ++i) {
-                new(data_ + i) T();
-            }
-        }catch(...){
-            DestroyN(data_.GetAddress(), i);
-            throw;
-        }
+        std::uninitialized_value_construct_n(data_.GetAddress(), size);
     }
     Vector(const Vector& other)
             : data_(other.size_)
             , size_(other.size_)  //
     {
-        size_t i = 0;
-        try{
-            for (; i != other.size_; ++i) {
-                CopyConstruct(data_.GetAddress() + i, other.data_[i]);
-            }
-        }
-        catch(...){
-            DestroyN(data_.GetAddress(), i);
-            throw;
+        // constexpr оператор if будет вычислен во время компиляции
+        if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+            std::uninitialized_move_n(other.data_.GetAddress(), size_, data_.GetAddress());
+        } else {
+            std::uninitialized_copy_n(other.data_.GetAddress(), size_, data_.GetAddress());
         }
     }
+
+    Vector& operator=(const Vector& rhs) {
+        if (this != &rhs) {
+            if (rhs.size_ > data_.Capacity()) {
+                Vector rhs_copy(rhs);
+                Swap(rhs_copy);
+            } else {
+               if(rhs.size_<size_) {
+                   std::destroy_n(data_.GetAddress() + rhs.size_, size_ - rhs.size_);
+                   std::uninitialized_move_n(rhs.data_.GetAddress(), size_, data_.GetAddress());
+                   size_ = rhs.size_;
+               }
+               else{
+                   std::uninitialized_move_n(rhs.data_.GetAddress(), size_, data_.GetAddress());
+                   size_ = rhs.size_;
+               }
+            }
+        }
+        return *this;
+    }
+
+    Vector( Vector&& other)noexcept{
+        Swap(other);
+    }
     ~Vector() {
-        DestroyN(data_.GetAddress(), size_);
+        std::destroy_n(data_.GetAddress(), size_);
     }
     [[nodiscard]] size_t Size() const noexcept {
         return size_;
@@ -125,33 +148,17 @@ public:
             return;
         }
         RawMemory<T> new_data(new_capacity);
-        size_t i = 0;
-        try{
-            for (; i != size_; ++i) {
-                CopyConstruct(new_data.GetAddress() + i, data_[i]);
-            }
-        }catch(...){
-            DestroyN(new_data.GetAddress(), i);
-            throw;
+        // constexpr оператор if будет вычислен во время компиляции
+        if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+            std::uninitialized_move_n(data_.GetAddress(), size_, new_data.GetAddress());
+        } else {
+            std::uninitialized_copy_n(data_.GetAddress(), size_, new_data.GetAddress());
         }
-        DestroyN(data_.GetAddress(), size_);
-
+        std::destroy_n(data_.GetAddress(), size_);
         data_.Swap(new_data);
     }
-private:
-    // Вызывает деструкторы n объектов массива по адресу buf
-    static void DestroyN(T* buf, size_t n) noexcept {
-        for (size_t i = 0; i != n; ++i) {
-            Destroy(buf + i);
-        }
-    }
-    // Создаёт копию объекта elem в сырой памяти по адресу buf
-    static void CopyConstruct(T* buf, const T& elem) {
-        new (buf) T(elem);
-    }
-    // Вызывает деструктор объекта по адресу buf
-    static void Destroy(T* buf) noexcept {
-        buf->~T();
+    void Swap(Vector& other) noexcept{
+        data_.Swap(other.data_);
     }
 private:
     RawMemory<T> data_;
